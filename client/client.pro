@@ -3,7 +3,11 @@ CONFIG   += c++17
 TARGET    = client
 TEMPLATE  = app
 
-SOURCES += main.cpp \
-           client.cpp
+SOURCES += \
+    $$PWD/main.cpp \
+    $$PWD/client.cpp
 
-HEADERS += client.h 
+HEADERS += \
+    $$PWD/client.h 
+
+VERSION = 1.0.0 

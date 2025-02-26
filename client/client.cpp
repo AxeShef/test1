@@ -4,6 +4,9 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QJsonParseError>
+#include <QDebug>
+#include <QTimer>
 
 Client::Client(QWidget *parent) : QMainWindow(parent)
 {
@@ -30,6 +33,10 @@ void Client::setupUi()
     
     treeWidget = new QTreeWidget(this);
     treeWidget->setHeaderLabels({"IP", "Имя", "Описание"});
+    treeWidget->setAlternatingRowColors(true);
+    treeWidget->setRootIsDecorated(false);
+    treeWidget->setUniformRowHeights(true);
+    treeWidget->setSortingEnabled(true);
     
     statusLabel = new QLabel("Статус подключения: Отключено", this);
     
@@ -37,6 +44,10 @@ void Client::setupUi()
     layout->addWidget(statusLabel);
     
     resize(800, 600);
+    
+    treeWidget->setColumnWidth(0, 150);
+    treeWidget->setColumnWidth(1, 200);
+    treeWidget->setColumnWidth(2, 300);
 }
 
 void Client::connectToServer()
@@ -47,13 +58,16 @@ void Client::connectToServer()
 void Client::handleConnected()
 {
     updateConnectionStatus();
-    // Отправляем запрос на получение данных
+    qDebug() << "Отправка запроса GET_DATA";
     socket->write("GET_DATA");
 }
 
 void Client::handleDisconnected()
 {
     updateConnectionStatus();
+    
+    // Попытка переподключения через 5 секунд
+    QTimer::singleShot(5000, this, &Client::connectToServer);
 }
 
 void Client::handleError(QAbstractSocket::SocketError error)
@@ -73,18 +87,46 @@ void Client::updateConnectionStatus()
 void Client::handleReadyRead()
 {
     QByteArray jsonData = socket->readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(jsonData);
+    
+    if (jsonData.isEmpty()) {
+        qDebug() << "Получены пустые данные";
+        return;
+    }
+    
+    qDebug() << "Получены данные:" << jsonData;
+    
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(jsonData, &parseError);
+    
+    if (parseError.error != QJsonParseError::NoError) {
+        qWarning() << "JSON parsing error:" << parseError.errorString();
+        return;
+    }
     
     if (doc.isArray()) {
         QJsonArray array = doc.array();
         treeWidget->clear();
         
+        qDebug() << "Количество элементов в массиве:" << array.size();
+        
         for (const QJsonValue &value : array) {
             QJsonObject obj = value.toObject();
+            
+            qDebug() << "Обработка объекта:";
+            qDebug() << "IP:" << obj["ip"].toString();
+            qDebug() << "Name:" << obj["name"].toString();
+            qDebug() << "Description:" << obj["description"].toString();
+            
             QTreeWidgetItem *item = new QTreeWidgetItem(treeWidget);
             item->setText(0, obj["ip"].toString());
             item->setText(1, obj["name"].toString());
             item->setText(2, obj["description"].toString());
         }
+        
+        for (int i = 0; i < treeWidget->columnCount(); ++i) {
+            treeWidget->resizeColumnToContents(i);
+        }
+    } else {
+        qDebug() << "Полученные данные не являются массивом";
     }
 } 

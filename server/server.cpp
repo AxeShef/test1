@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QFile>
+#include <QCoreApplication>
 
 Server::Server(QObject *parent) : QObject(parent)
 {
@@ -27,8 +28,20 @@ bool Server::start(int port)
 
     connect(tcpServer, &QTcpServer::newConnection, this, &Server::handleNewConnection);
     
+    // Используем абсолютный путь
+    QString execPath = QCoreApplication::applicationDirPath();
+    QString equipmentPath = execPath + "/equipment";
+    qDebug() << "Путь к папке equipment:" << equipmentPath;
+    
+    // Проверяем существование папки
+    QDir dir(equipmentPath);
+    if (!dir.exists()) {
+        qDebug() << "Папка equipment не найдена!";
+        return false;
+    }
+    
     // Чтение XML файлов из каталога
-    parseXmlFiles("./equipment");
+    parseXmlFiles(equipmentPath);
     
     qDebug() << "Сервер запущен на порту" << port;
     return true;
@@ -65,9 +78,12 @@ void Server::handleReadyRead()
     if (!clientSocket) return;
 
     QByteArray request = clientSocket->readAll();
-    // Здесь можно добавить обработку различных типов запросов
-    // Пока просто отправляем все данные при любом запросе
-    sendDataToClient(clientSocket);
+    qDebug() << "Получен запрос от клиента:" << request;
+    
+    // Отправляем данные клиенту
+    QByteArray jsonData = equipmentToJson();
+    qDebug() << "Отправляем клиенту данные:" << jsonData;
+    clientSocket->write(jsonData);
 }
 
 void Server::handleDisconnected()
@@ -93,6 +109,7 @@ void Server::parseXmlFiles(const QString &directory)
 
 void Server::parseXmlFile(const QString &filePath)
 {
+    qDebug() << "Чтение XML файла:" << filePath;
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         qDebug() << "Не удалось открыть файл:" << filePath;
@@ -160,6 +177,7 @@ void Server::parseXmlFile(const QString &filePath)
 
 void Server::saveEquipmentToDb(const Equipment &equipment)
 {
+    qDebug() << "Сохранение в БД оборудования с IP:" << equipment.ip;
     QSqlQuery query;
     
     // Сохраняем основную информацию об оборудовании
@@ -171,6 +189,8 @@ void Server::saveEquipmentToDb(const Equipment &equipment)
     
     if (!query.exec()) {
         qDebug() << "Ошибка сохранения в БД:" << query.lastError().text();
+    } else {
+        qDebug() << "Успешно сохранено в БД";
     }
 }
 
